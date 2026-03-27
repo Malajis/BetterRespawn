@@ -21,7 +21,7 @@ public class ConfigManager {
         plugin.reloadConfig();
         FileConfiguration config = plugin.getConfig();
 
-        enableFeature = config.getBoolean("enable-feature", true);
+        enableFeature = config.getBoolean("enable-feature", false);
         respawnTime = config.getInt("respawn-time", 5);
         autoRespawn = config.getBoolean("auto-respawn", true);
         experienceCost = config.getInt("experience-cost", 25);

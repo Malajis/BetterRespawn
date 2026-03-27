@@ -24,7 +24,7 @@
 
 ```yaml
 # 是否启用插件功能（原地重生+飞行+倒计时）
-enable-feature: true
+enable-feature: false
 
 # 是否自动重生（死亡后自动复活）
 auto-respawn: true
