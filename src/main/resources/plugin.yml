@@ -1,0 +1,20 @@
+name: BetterRespawn
+version: 1.0
+main: me.malajis.BetterRespawn.Main
+api-version: 1.13
+author: Malajis
+description: 死亡后原地复活并带有倒计时，倒计时期间可以飞行
+
+commands:
+  betterrespawn:
+    description: BetterRespawn 插件主命令
+    aliases: [br]
+    usage: /<command> reload
+
+permissions:
+  betterrespawn.reload:
+    description: 允许重载配置文件
+    default: op
+  betterrespawn.admin:
+    description: 管理员权限，免除所有限制（不扣经验、无倒计时、可自由行动）
+    default: op
