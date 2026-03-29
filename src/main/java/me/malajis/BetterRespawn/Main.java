@@ -6,11 +6,22 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * BetterRespawn 插件主类
+ * 功能：玩家死亡后原地复活并带有倒计时，倒计时期间可以飞行
+ */
 public class Main extends JavaPlugin {
 
-    private Map<UUID, Object> respawningPlayers;
+    /** 当前正在复活倒计时的玩家映射 */
+    private Map<UUID, RespawnTask> respawningPlayers;
+    
+    /** 配置管理器 */
     private ConfigManager configManager;
 
+    /**
+     * 插件启用时调用
+     * 初始化数据结构、加载配置、注册事件和命令
+     */
     @Override
     public void onEnable() {
         respawningPlayers = new HashMap<>();
@@ -28,18 +39,16 @@ public class Main extends JavaPlugin {
         getLogger().info("BetterRespawn 插件已启用");
     }
 
+    /**
+     * 插件禁用时调用
+     * 安全地取消所有倒计时任务，清理资源
+     */
     @Override
     public void onDisable() {
-        // 安全地取消所有倒计时任务
         if (respawningPlayers != null) {
-            for (Object task : respawningPlayers.values()) {
+            for (RespawnTask task : respawningPlayers.values()) {
                 if (task != null) {
-                    try {
-                        // 使用反射调用 cancel 方法
-                        task.getClass().getMethod("cancel").invoke(task);
-                    } catch (Exception e) {
-                        // 忽略取消时的异常
-                    }
+                    task.cancel();
                 }
             }
             respawningPlayers.clear();
@@ -47,10 +56,18 @@ public class Main extends JavaPlugin {
         getLogger().info("BetterRespawn 插件已禁用");
     }
 
-    public Map<UUID, Object> getRespawningPlayers() {
+    /**
+     * 获取正在复活倒计时的玩家映射
+     * @return 玩家UUID到复活任务的映射
+     */
+    public Map<UUID, RespawnTask> getRespawningPlayers() {
         return respawningPlayers;
     }
 
+    /**
+     * 获取配置管理器
+     * @return 配置管理器实例
+     */
     public ConfigManager getConfigManager() {
         return configManager;
     }

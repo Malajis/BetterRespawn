@@ -5,14 +5,30 @@ import org.bukkit.command.Command;
 import org.bukkit.command.CommandExecutor;
 import org.bukkit.command.CommandSender;
 
+/**
+ * 命令管理器
+ * 处理插件的命令交互
+ */
 public class CommandManager implements CommandExecutor {
 
     private final Main plugin;
 
+    /**
+     * 构造函数
+     * @param plugin 插件主类实例
+     */
     public CommandManager(Main plugin) {
         this.plugin = plugin;
     }
 
+    /**
+     * 命令执行处理
+     * @param sender 命令发送者
+     * @param command 命令对象
+     * @param label 命令标签
+     * @param args 命令参数
+     * @return 命令是否执行成功
+     */
     @Override
     public boolean onCommand(CommandSender sender, Command command, String label, String[] args) {
         if (args.length == 0 || args[0].equalsIgnoreCase("help")) {
@@ -28,6 +44,11 @@ public class CommandManager implements CommandExecutor {
         return true;
     }
 
+    /**
+     * 处理重载配置命令
+     * @param sender 命令发送者
+     * @return 命令是否执行成功
+     */
     private boolean handleReload(CommandSender sender) {
         if (!sender.hasPermission("betterrespawn.reload")) {
             sender.sendMessage(ChatColor.RED + "你没有权限执行此命令！");
@@ -47,6 +68,10 @@ public class CommandManager implements CommandExecutor {
         }
     }
 
+    /**
+     * 发送帮助信息
+     * @param sender 命令发送者
+     */
     private void sendHelp(CommandSender sender) {
         ConfigManager cfg = plugin.getConfigManager();
         sender.sendMessage(ChatColor.GOLD + "===== BetterRespawn 帮助 =====");
@@ -57,9 +82,14 @@ public class CommandManager implements CommandExecutor {
         sender.sendMessage(ChatColor.GRAY + "  功能开关: " + getStatusColor(cfg.isEnableFeature()) + cfg.isEnableFeature());
         sender.sendMessage(ChatColor.GRAY + "  自动重生: " + getStatusColor(cfg.isAutoRespawn()) + cfg.isAutoRespawn());
         sender.sendMessage(ChatColor.GRAY + "  倒计时时间: " + ChatColor.WHITE + cfg.getRespawnTime() + "秒");
-        sender.sendMessage(ChatColor.GRAY + "  经验扣除: " + ChatColor.WHITE + cfg.getExperienceCost() + "%");
+        sender.sendMessage(ChatColor.GRAY + "  等级扣除比例: " + ChatColor.WHITE + cfg.getExperienceCost());
     }
 
+    /**
+     * 获取状态颜色
+     * @param status 状态值
+     * @return 对应的颜色字符串
+     */
     private String getStatusColor(boolean status) {
         return status ? ChatColor.GREEN.toString() : ChatColor.RED.toString();
     }

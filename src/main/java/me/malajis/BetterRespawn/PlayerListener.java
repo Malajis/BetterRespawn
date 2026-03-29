@@ -17,18 +17,33 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
+/**
+ * 玩家事件监听器
+ * 处理玩家死亡、重生、退出等相关事件
+ */
 public class PlayerListener implements Listener {
 
     private final Main plugin;
+    
+    /** 玩家死亡位置映射 */
     private final Map<UUID, Location> deathLocations = new HashMap<>();
 
+    /**
+     * 构造函数
+     * @param plugin 插件主类实例
+     */
     public PlayerListener(Main plugin) {
         this.plugin = plugin;
     }
 
+    /**
+     * 玩家死亡事件处理
+     * @param event 玩家死亡事件
+     */
     @EventHandler
     public void onPlayerDeath(PlayerDeathEvent event) {
         Player player = event.getEntity();
+        if (player == null) return;
 
         // 管理员跳过所有处理
         if (player.hasPermission("betterrespawn.admin")) {
@@ -48,13 +63,17 @@ public class PlayerListener implements Listener {
         autoRespawnIfEnabled(player);
     }
 
-    /** 自动重生（如果配置开启） */
+    /**
+     * 自动重生（如果配置开启）
+     * @param player 目标玩家
+     */
     private void autoRespawnIfEnabled(Player player) {
+        if (player == null) return;
         if (plugin.getConfigManager().isAutoRespawn()) {
             new BukkitRunnable() {
                 @Override
                 public void run() {
-                    if (player != null && player.isDead()) {
+                    if (player.isOnline() && player.isDead()) {
                         try {
                             player.spigot().respawn();
                         } catch (Exception e) {
@@ -66,41 +85,61 @@ public class PlayerListener implements Listener {
         }
     }
 
-    /** 扣除经验并发送消息 */
+    /**
+     * 扣除等级并发送消息
+     * @param player 目标玩家
+     */
     private void deductExperience(Player player) {
-        int percent = plugin.getConfigManager().getExperienceCost();
-        int current = player.getTotalExperience();
-        int deduct = current * percent / 100;
-        int remaining = Math.max(0, current - deduct);
+        if (player == null || !player.isOnline()) return;
+        
+        double ratio = plugin.getConfigManager().getExperienceCost();
+        int originalLevel = player.getLevel();
+        int newLevel = Math.max(0, (int) Math.floor(originalLevel * (1 - ratio)));
+        int levelsDeducted = originalLevel - newLevel;
 
-        player.setTotalExperience(0);
-        player.setLevel(0);
+        player.setLevel(newLevel);
         player.setExp(0);
-        player.giveExp(remaining);
 
         player.sendMessage(ChatColor.DARK_GRAY + "[" + ChatColor.RED + "重生系统" + ChatColor.DARK_GRAY + "] "
-                + ChatColor.GRAY + "因死亡扣除 " + ChatColor.RED + deduct
-                + ChatColor.GRAY + " 经验 (" + percent + "%)");
+                + ChatColor.GRAY + "因死亡扣除 " + ChatColor.RED + levelsDeducted
+                + ChatColor.GRAY + " 级 (" + (int)(ratio * 100) + "%)");
     }
 
-    /** 获取安全的死亡位置（虚空时传送到重生点） */
+    /**
+     * 获取安全的死亡位置（虚空时传送到重生点）
+     * @param player 目标玩家
+     * @return 安全的死亡位置
+     */
     private Location getSafeDeathLocation(Player player) {
+        if (player == null || player.getWorld() == null) return null;
+        
         Location deathLoc = player.getLocation().clone();
-        if (isLocationVoid(deathLoc)) {
+        if (Utils.isLocationVoid(deathLoc)) {
             Location spawn = player.getWorld().getSpawnLocation();
-            Location ground = findGroundLocation(spawn);
+            Location ground = Utils.findGroundLocation(spawn);
             return ground != null ? ground : spawn;
         }
         return deathLoc;
     }
 
+    /**
+     * 玩家重生事件处理
+     * @param event 玩家重生事件
+     */
     @EventHandler
     public void onPlayerRespawn(PlayerRespawnEvent event) {
         Player player = event.getPlayer();
+        if (player == null) return;
+
+        // 先清理可能残留的任务
+        RespawnTask oldTask = plugin.getRespawningPlayers().remove(player.getUniqueId());
+        if (oldTask != null) {
+            oldTask.cancel();
+        }
 
         // 管理员直接复活
         if (player.hasPermission("betterrespawn.admin")) {
-            healPlayer(player);
+            Utils.healPlayer(player);
             return;
         }
 
@@ -112,7 +151,7 @@ public class PlayerListener implements Listener {
                 new BukkitRunnable() {
                     @Override
                     public void run() {
-                        if (player != null && player.isOnline()) {
+                        if (player.isOnline()) {
                             player.teleport(deathLoc);
                             RespawnTask task = new RespawnTask(plugin, player);
                             plugin.getRespawningPlayers().put(player.getUniqueId(), task);
@@ -120,82 +159,86 @@ public class PlayerListener implements Listener {
                         }
                     }
                 }.runTaskLater(plugin, 1L);
+            } else {
+                // 如果没有死亡位置，直接复活
+                new BukkitRunnable() {
+                    @Override
+                    public void run() {
+                        if (player.isOnline()) {
+                            Utils.healPlayer(player);
+                        }
+                    }
+                }.runTaskLater(plugin, 2L);
             }
         } else {
             // 功能关闭：直接复活
             new BukkitRunnable() {
                 @Override
                 public void run() {
-                    if (player != null && player.isOnline()) {
-                        healPlayer(player);
+                    if (player.isOnline()) {
+                        Utils.healPlayer(player);
                     }
                 }
             }.runTaskLater(plugin, 2L);
         }
     }
 
-    /** 恢复玩家生命并清除负面效果 */
-    private void healPlayer(Player player) {
-        player.setHealth(20);
-        player.getActivePotionEffects().forEach(effect -> player.removePotionEffect(effect.getType()));
-    }
-
+    /**
+     * 玩家退出事件处理
+     * @param event 玩家退出事件
+     */
     @EventHandler
     public void onPlayerQuit(PlayerQuitEvent event) {
-        Object task = plugin.getRespawningPlayers().remove(event.getPlayer().getUniqueId());
+        Player player = event.getPlayer();
+        if (player == null) return;
+        
+        RespawnTask task = plugin.getRespawningPlayers().remove(player.getUniqueId());
         if (task != null) {
-            try {
-                task.getClass().getMethod("cancel").invoke(task);
-            } catch (Exception e) {
-                // 忽略取消时的异常
-            }
+            task.cancel();
         }
         deathLocations.remove(event.getPlayer().getUniqueId());
     }
 
-    /** 检测位置是否在虚空（下方无固体方块） */
-    private boolean isLocationVoid(Location loc) {
-        for (int y = loc.getBlockY(); y >= 0; y--) {
-            Location check = loc.clone();
-            check.setY(y);
-            if (check.getBlock().getType().isSolid()) return false;
-        }
-        return true;
-    }
-
-    /** 查找脚下最近的固体方块位置 */
-    private Location findGroundLocation(Location loc) {
-        for (int y = loc.getBlockY(); y >= 0; y--) {
-            Location check = loc.clone();
-            check.setY(y);
-            if (check.getBlock().getType().isSolid()) {
-                return check.clone().add(0.5, 1, 0.5);
-            }
-        }
-        return null;
-    }
-
     // ==================== 限制类事件 ====================
-    /** 判断是否应该取消玩家的操作（倒计时中 + 非管理员 + 功能开启） */
+    
+    /**
+     * 判断是否应该取消玩家的操作
+     * 条件：倒计时中 + 非管理员 + 功能开启
+     * @param player 目标玩家
+     * @return 是否应该取消操作
+     */
     private boolean shouldCancel(Player player) {
         if (player == null) return false;
         if (player.hasPermission("betterrespawn.admin")) return false;
+        // 如果功能没有开启，绝对不要限制玩家
         if (!plugin.getConfigManager().isEnableFeature()) return false;
-        return plugin.getRespawningPlayers().containsKey(player.getUniqueId());
+        // 只有在功能开启且玩家确实在倒计时Map中时才限制
+        return plugin.getRespawningPlayers() != null && 
+               plugin.getRespawningPlayers().containsKey(player.getUniqueId());
     }
 
+    /** 实体伤害事件 */
     @EventHandler public void onEntityDamage(EntityDamageEvent e) {
         if (e.getEntity() instanceof Player && shouldCancel((Player) e.getEntity())) e.setCancelled(true);
     }
+    /** 玩家交互事件 */
     @EventHandler public void onPlayerInteract(PlayerInteractEvent e) { if (shouldCancel(e.getPlayer())) e.setCancelled(true); }
+    /** 方块破坏事件 */
     @EventHandler public void onBlockBreak(BlockBreakEvent e) { if (shouldCancel(e.getPlayer())) e.setCancelled(true); }
+    /** 方块放置事件 */
     @EventHandler public void onBlockPlace(BlockPlaceEvent e) { if (shouldCancel(e.getPlayer())) e.setCancelled(true); }
+    /** 玩家丢弃物品事件 */
     @EventHandler public void onPlayerDropItem(PlayerDropItemEvent e) { if (shouldCancel(e.getPlayer())) e.setCancelled(true); }
+    /** 玩家拾取物品事件 */
     @EventHandler public void onPlayerPickupItem(PlayerPickupItemEvent e) { if (shouldCancel(e.getPlayer())) e.setCancelled(true); }
+    /** 玩家与实体交互事件 */
     @EventHandler public void onPlayerInteractEntity(PlayerInteractEntityEvent e) { if (shouldCancel(e.getPlayer())) e.setCancelled(true); }
+    /** 背包点击事件 */
     @EventHandler public void onInventoryClick(InventoryClickEvent e) {
         if (e.getWhoClicked() instanceof Player && shouldCancel((Player) e.getWhoClicked())) e.setCancelled(true);
     }
+    /** 玩家命令执行事件 */
     @EventHandler public void onPlayerCommand(PlayerCommandPreprocessEvent e) { if (shouldCancel(e.getPlayer())) e.setCancelled(true); }
+    /** 玩家移动事件（允许移动） */
     @EventHandler public void onPlayerMove(PlayerMoveEvent e) { /* 允许移动 */ }
 }
